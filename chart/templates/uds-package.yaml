@@ -46,13 +46,8 @@ spec:
           app: vaultwarden
         gateway: tenant
         host: vaultwarden
-        port: 1234
-    allow:
-      - direction: Ingress
-        remoteGenerated: IntraNamespace
-
-      - direction: Egress
-        remoteGenerated: IntraNamespace
+        port: 80
+        targetPort: 8080
 
       # Custom rules for unanticipated scenarios
       {{- with .Values.additionalNetworkAllow }}
