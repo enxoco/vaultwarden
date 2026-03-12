@@ -4,8 +4,8 @@
 # Example values from UDS package repo template
 domain: "###ZARF_VAR_DOMAIN###"
 sso:
-  enabled: false
-  protocol: saml
+  enabled: true
+  protocol: oidc
   secretName: vaultwarden-sso
   adminGroups: ["/Vaultwarden Admin", "/UDS Core/Admin"]
   saml:

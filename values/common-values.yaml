@@ -2,8 +2,14 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Defense-Unicorns-Commercial
 
 # Values common to all flavors
-
-domain: "###ZARF_VAR_DOMAIN###"
+sso:
+  enabled: true
+  existingSecret: vaultwarden-sso
+  authority: http://keycloak-http.keycloak.svc.cluster.local:8080/realms/uds
+  clientId: 
+    value: uds-package-vaultwarden
+    existingSecretKey: SSO_CLIENT_SECRET
+domain: "vaultwarden.###ZARF_VAR_DOMAIN###"
 storage:
   data:
     name: vaultwarden-data
@@ -11,6 +17,14 @@ storage:
     size: "###ZARF_VAR_STORAGE_SIZE###"
     keepPvc: true
     accessMode: "ReadWriteOnce"
+
+disableAdminToken: true
 adminToken:
-  value: "###ZARF_VAR_ADMIN_TOKEN###"
+  value: ""
 signupsAllowed: false
+image:
+  extraVars:
+    - key: DISABLE_ADMIN_TOKEN
+      value: "true"
+    - key: DOMAIN
+      value: "https://vaultwarden.###ZARF_VAR_DOMAIN###"

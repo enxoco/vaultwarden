@@ -16,9 +16,9 @@ metadata:
 
 variables:
   - name: DOMAIN
-    default: "https://vaultwarden.uds.dev"
+    default: "uds.dev"
   - name: ADMIN_TOKEN
-    default: "ThisIsASecureAdminTokenReplaceInProduction"
+    default: "" #Leave blank to enable admin panel behind authservice.  Set to a non-empty value to enable admin panel with this token as the password.
     description: "Admin token for Vaultwarden. Replace with a secure value in production."
     prompt: true
     sensitive: true

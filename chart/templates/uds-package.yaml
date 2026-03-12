@@ -7,25 +7,30 @@ metadata:
   name: vaultwarden
   namespace: {{ .Release.Namespace }}
 spec:
-  {{- if .Values.sso.enabled }}
   sso:
     - name: Vaultwarden Login
       clientId: uds-package-vaultwarden
       redirectUris:
-        - "https://vaultwarden.{{ .Values.domain }}/oauth2/callback/saml"
-      protocol: saml
-      defaultClientScopes:
-        - "mapper-saml-email-email"
-        - "mapper-saml-username-login"
-        - "mapper-saml-username-name"
+        - "https://vaultwarden.{{ .Values.domain }}/identity/connect/oidc-signin"
+      enableAuthserviceSelector:
+        app.kubernetes.io/name: vaultwarden
+      groups:
+        anyOf: ["/UDS Core/Admin"]
 
-      attributes:
-        saml.client.signature: "false"
 
       secretName: {{ .Values.sso.secretName }}
       # This secret template configures sso for the application. Will need updated based on application required configuration
       secretTemplate:
+        SSO_CLIENT_SECRET: clientField(secret)
+        clientId: clientField(clientId)
         vaultwarden.sso.config.key: |
+            SSO_CLIENT_ID: clientField(clientId)
+            
+
+            AUTH_URL: https://sso.{{ .Values.domain }}/realms/uds/protocol/openid-connect/auth
+            TOKEN_URL: https://sso.{{ .Values.domain }}/realms/uds/protocol/openid-connect/token
+            USERINFO_URL: https://sso.{{ .Values.domain }}/realms/uds/protocol/openid-connect/userinfo
+            
             example.auth.saml.enabled: {{ .Values.sso.enabled }}
             example.auth.saml.applicationId: clientField(clientId)
             example.auth.saml.providerName: {{ .Values.sso.saml.providerName }}
@@ -35,7 +40,6 @@ spec:
             example.auth.saml.user.name: name
             example.auth.saml.user.email: email
             example.auth.saml.certificate.secured: clientField(samlIdpCertificate)
-  {{- end }}
   # Customize network policies and expose services via istio
   network:
     serviceMesh:
@@ -43,12 +47,48 @@ spec:
     expose:
       - service: vaultwarden
         podLabels:
-          app: vaultwarden
+          app.kubernetes.io/name: vaultwarden
         gateway: tenant
         host: vaultwarden
         port: 80
         targetPort: 8080
+    allow:
+      - direction: Ingress
+        remoteGenerated: IntraNamespace
+        port: 8080
+        description: "App Internal"
 
+      - direction: Egress
+        remoteGenerated: IntraNamespace
+        port: 8080
+        description: "App Internal"
+
+      - direction: Egress
+        remoteNamespace: keycloak
+        remoteSelector:
+          app.kubernetes.io/name: keycloak
+        selector:
+          app: vaultwarden
+        port: 8080
+        description: "SSO Internal"
+      
+      - direction: Ingress
+        remoteNamespace: keycloak
+        remoteSelector:
+          app.kubernetes.io/name: keycloak
+        selector:
+          app: vaultwarden
+        port: 8080
+        description: "SSO Internal Ingress"
+
+      - direction: Egress
+        remoteNamespace: istio-tenant-gateway
+        remoteSelector:
+          app: tenant-ingressgateway
+        selector:
+          app: vaultwarden
+        port: 443
+        description: "SSO External"
       # Custom rules for unanticipated scenarios
       {{- with .Values.additionalNetworkAllow }}
       {{ toYaml . | nindent 6 }}

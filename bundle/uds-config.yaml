@@ -9,7 +9,7 @@
 #     EXAMPLE_DB_ENDPOINT: postgres
 variables:
   vaultwarden:
-    DOMAIN: "https://vaultwarden.uds.dev"
+    DOMAIN: "uds.dev"
     STORAGE_CLASS: "local-path"
     STORAGE_SIZE: "2Gi"
-    ADMIN_TOKEN: "ThisIsASecureAdminTokenReplaceInProduction123!@#"
+    ADMIN_TOKEN: ""
