@@ -1,0 +1,14 @@
+# Copyright 2024 Defense Unicorns
+# SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Defense-Unicorns-Commercial
+
+# Example values from UDS package repo template
+domain: "###ZARF_VAR_DOMAIN###"
+sso:
+  enabled: false
+  protocol: saml
+  secretName: vaultwarden-sso
+  adminGroups: ["/Vaultwarden Admin", "/UDS Core/Admin"]
+  saml:
+    providerName: "Vaultwarden"
+# Support for custom `network.allow` entries on the Package CR
+additionalNetworkAllow: []

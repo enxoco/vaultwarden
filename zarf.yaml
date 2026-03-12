@@ -1,0 +1,46 @@
+# Copyright 2024 Defense Unicorns
+# SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Defense-Unicorns-Commercial
+
+# yaml-language-server: $schema=https://raw.githubusercontent.com/defenseunicorns/zarf/main/zarf.schema.json
+kind: ZarfPackageConfig
+metadata:
+  name: vaultwarden
+  description: "UDS Vaultwarden package"
+  version: "dev"
+  annotations:
+    dev.uds.title: Vaultwarden
+    dev.uds.tagline: ""
+    dev.uds.categories: ""
+    dev.uds.keywords: ""
+    dev.uds.icon: ""
+
+variables:
+  - name: DOMAIN
+    default: "https://vaultwarden.uds.dev"
+  - name: ADMIN_TOKEN
+    default: "ThisIsASecureAdminTokenReplaceInProduction"
+    description: "Admin token for Vaultwarden. Replace with a secure value in production."
+    prompt: true
+    sensitive: true
+  - name: STORAGE_CLASS
+    default: "local-path"
+    description: "Kubernetes StorageClass for Vaultwarden persistence. Ensure this StorageClass is available in your cluster."
+    prompt: true
+  - name: STORAGE_SIZE
+    default: "2Gi"
+    description: "Storage size for Vaultwarden persistence. Adjust based on expected usage."
+    prompt: true
+components:
+  - name: vaultwarden
+    required: true
+    description: "Deploy Vaultwarden"
+    import:
+      path: common
+    only:
+      flavor: upstream
+    charts:
+      - name: vaultwarden
+        valuesFiles:
+          - values/upstream-values.yaml
+    images: []
+

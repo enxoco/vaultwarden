@@ -1,0 +1,16 @@
+# Copyright 2024 Defense Unicorns
+# SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Defense-Unicorns-Commercial
+
+# Values common to all flavors
+
+domain: "###ZARF_VAR_DOMAIN###"
+storage:
+  data:
+    name: vaultwarden-data
+    class: "###ZARF_VAR_STORAGE_CLASS###"
+    size: "###ZARF_VAR_STORAGE_SIZE###"
+    keepPvc: true
+    accessMode: "ReadWriteOnce"
+adminToken:
+  value: "###ZARF_VAR_ADMIN_TOKEN###"
+signupsAllowed: false
