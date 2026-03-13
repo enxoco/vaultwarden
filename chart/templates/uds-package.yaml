@@ -7,39 +7,27 @@ metadata:
   name: vaultwarden
   namespace: {{ .Release.Namespace }}
 spec:
+  adminToken:
+    value: {{ .Values.adminToken | quote }}
   sso:
     - name: Vaultwarden Login
       clientId: uds-package-vaultwarden
       redirectUris:
         - "https://vaultwarden.{{ .Values.domain }}/identity/connect/oidc-signin"
-      enableAuthserviceSelector:
-        app.kubernetes.io/name: vaultwarden
-      groups:
-        anyOf: ["/UDS Core/Admin"]
+      # enableAuthserviceSelector:
+      #   app.kubernetes.io/name: vaultwarden
+      # groups:
+      #   anyOf: ["/UDS Core/Admin"]
 
 
       secretName: {{ .Values.sso.secretName }}
       # This secret template configures sso for the application. Will need updated based on application required configuration
       secretTemplate:
         SSO_CLIENT_SECRET: clientField(secret)
-        clientId: clientField(clientId)
-        vaultwarden.sso.config.key: |
-            SSO_CLIENT_ID: clientField(clientId)
-            
+        SSO_CLIENT_ID: "clientField(clientId)"
+        SSO_AUTHORITY: "https://sso.{{ .Values.domain }}/realms/uds"
+        
 
-            AUTH_URL: https://sso.{{ .Values.domain }}/realms/uds/protocol/openid-connect/auth
-            TOKEN_URL: https://sso.{{ .Values.domain }}/realms/uds/protocol/openid-connect/token
-            USERINFO_URL: https://sso.{{ .Values.domain }}/realms/uds/protocol/openid-connect/userinfo
-            
-            example.auth.saml.enabled: {{ .Values.sso.enabled }}
-            example.auth.saml.applicationId: clientField(clientId)
-            example.auth.saml.providerName: {{ .Values.sso.saml.providerName }}
-            example.auth.saml.providerId: https://sso.{{ .Values.domain }}/realms/uds
-            example.auth.saml.loginUrl: https://sso.{{ .Values.domain }}/realms/uds/protocol/saml
-            example.auth.saml.user.login: login
-            example.auth.saml.user.name: name
-            example.auth.saml.user.email: email
-            example.auth.saml.certificate.secured: clientField(samlIdpCertificate)
   # Customize network policies and expose services via istio
   network:
     serviceMesh:
@@ -68,25 +56,17 @@ spec:
         remoteSelector:
           app.kubernetes.io/name: keycloak
         selector:
-          app: vaultwarden
+          app.kubernetes.io/name: vaultwarden
         port: 8080
         description: "SSO Internal"
       
-      - direction: Ingress
-        remoteNamespace: keycloak
-        remoteSelector:
-          app.kubernetes.io/name: keycloak
-        selector:
-          app: vaultwarden
-        port: 8080
-        description: "SSO Internal Ingress"
 
       - direction: Egress
         remoteNamespace: istio-tenant-gateway
         remoteSelector:
           app: tenant-ingressgateway
         selector:
-          app: vaultwarden
+          app.kubernetes.io/name: vaultwarden
         port: 443
         description: "SSO External"
       # Custom rules for unanticipated scenarios

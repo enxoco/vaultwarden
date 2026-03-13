@@ -18,10 +18,10 @@ variables:
   - name: DOMAIN
     default: "uds.dev"
   - name: ADMIN_TOKEN
-    default: "" #Leave blank to enable admin panel behind authservice.  Set to a non-empty value to enable admin panel with this token as the password.
+    default: "SuperSecureAdminToken123"
     description: "Admin token for Vaultwarden. Replace with a secure value in production."
     prompt: true
-    sensitive: true
+    sensitive: false
   - name: STORAGE_CLASS
     default: "local-path"
     description: "Kubernetes StorageClass for Vaultwarden persistence. Ensure this StorageClass is available in your cluster."

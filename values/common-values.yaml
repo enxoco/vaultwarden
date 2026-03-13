@@ -5,10 +5,9 @@
 sso:
   enabled: true
   existingSecret: vaultwarden-sso
-  authority: http://keycloak-http.keycloak.svc.cluster.local:8080/realms/uds
+  authority: https://sso.###ZARF_VAR_DOMAIN###/realms/uds
   clientId: 
     value: uds-package-vaultwarden
-    existingSecretKey: SSO_CLIENT_SECRET
 domain: "vaultwarden.###ZARF_VAR_DOMAIN###"
 storage:
   data:
@@ -18,13 +17,10 @@ storage:
     keepPvc: true
     accessMode: "ReadWriteOnce"
 
-disableAdminToken: true
-adminToken:
-  value: ""
+adminToken: 
+  value: "###ZARF_VAR_ADMIN_TOKEN###"
 signupsAllowed: false
 image:
   extraVars:
-    - key: DISABLE_ADMIN_TOKEN
-      value: "true"
     - key: DOMAIN
       value: "https://vaultwarden.###ZARF_VAR_DOMAIN###"
