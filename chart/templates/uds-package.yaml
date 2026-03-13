@@ -14,11 +14,6 @@ spec:
       clientId: uds-package-vaultwarden
       redirectUris:
         - "https://vaultwarden.{{ .Values.domain }}/identity/connect/oidc-signin"
-      # enableAuthserviceSelector:
-      #   app.kubernetes.io/name: vaultwarden
-      # groups:
-      #   anyOf: ["/UDS Core/Admin"]
-
 
       secretName: {{ .Values.sso.secretName }}
       # This secret template configures sso for the application. Will need updated based on application required configuration
@@ -50,16 +45,6 @@ spec:
         remoteGenerated: IntraNamespace
         port: 8080
         description: "App Internal"
-
-      - direction: Egress
-        remoteNamespace: keycloak
-        remoteSelector:
-          app.kubernetes.io/name: keycloak
-        selector:
-          app.kubernetes.io/name: vaultwarden
-        port: 8080
-        description: "SSO Internal"
-      
 
       - direction: Egress
         remoteNamespace: istio-tenant-gateway
