@@ -7,8 +7,6 @@ metadata:
   name: vaultwarden
   namespace: {{ .Release.Namespace }}
 spec:
-  adminToken:
-    value: {{ .Values.adminToken | quote }}
   sso:
     - name: Vaultwarden Login
       clientId: uds-package-vaultwarden
