@@ -139,18 +139,18 @@ jobs:
       - name: Vouch for Zarf Package
         env:
           OLM_CAT: cat-api.uds.run
-          OLM_ORG: mike-demo-org
+          OLM_ORG: uds-army-demo
         run: |
           ./olm vouch zarf-package-*.tar.zst \
             --sarif-evidence opengrep.sarif.json,gitleaks.sarif.json \
             --log-level debug --test-directory tests \
             --attestations zarf-create-witness.json,gitleaks-witness.json,shellcheck-witness.json
 
-      # Pushes the uds package to the uds army registry, make sure the org in oci://registry.uds.run/mike-demo-org is your org and not
-      # mike-demo-org, so an org called example would be oci://registry.uds.run/example
+      # Pushes the uds package to the uds army registry, make sure the org in oci://registry.uds.run/uds-army-demo is your org and not
+      # uds-army-demo, so an org called example would be oci://registry.uds.run/example
       # The two secrets are from a token generated in the uds army registry to allow this CI to push the package, token must be read/write.
       # Secret names can be changed if desired, doesn't need to be `UDS_ARMY_REG_USERNAME` and `UDS_ARMY_REG_PASSWORD`
       - name: Publish Zarf Package
         run: |
           uds zarf tools registry login -u ${{ secrets.UDS_ARMY_REG_USERNAME }} -p ${{ secrets.UDS_ARMY_REG_PASSWORD }} registry.uds.run
-          uds zarf package publish zarf-package-*.tar.zst oci://registry.uds.run/mike-demo-org
+          uds zarf package publish zarf-package-*.tar.zst oci://registry.uds.run/uds-army-demo
