@@ -1,0 +1,126 @@
+name: CI
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+# Overview
+# Lint: ShellCheck
+# SAST: opengrep
+# Secrets: gitleaks
+jobs:
+  build-package-vouch-publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+    
+      - name: UDS CLI Setup
+        uses: ./.github/actions/uds-cli-setup
+      
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v4.0.0
+
+      # Requires a read token to the Defense Unicorns org in the uds army registry to be able to pull the
+      # olm-installer package.
+      - name: OLM CLI Setup
+        uses: ./.github/actions/olm-cli-setup
+        with:
+          username: ${{ secrets.OLM_USER_ID }}
+          password: ${{ secrets.OLM_PASSWORD }}
+
+      - name: Install ShellCheck
+        run: sudo apt-get install -y shellcheck
+
+      # Only useful if source is available
+      - name: Install OpenGrep
+        run: |
+          curl -sSL https://raw.githubusercontent.com/opengrep/opengrep/v1.15.1/install.sh | bash
+          echo "$HOME/.opengrep/cli/latest" >> "$GITHUB_PATH"
+
+      # Should always run
+      - name: Install Gitleaks
+        run: |
+          curl -sSL https://github.com/gitleaks/gitleaks/releases/download/v8.30.0/gitleaks_8.30.0_linux_x64.tar.gz -o gitleaks.tar.gz
+          tar -zxf gitleaks.tar.gz
+          mkdir -p $HOME/.local/bin
+          mv gitleaks $HOME/.local/bin
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          rm gitleaks.tar.gz
+
+# Any step that creates an artifact or evidence should be run via witness-run-action so that the artifact/evidence
+# can be attested to.
+
+      - name: Witness Run ShellCheck
+        uses: testifysec/witness-run-action@7aa15e327829f1f2a523365c564c948d5dde69dd # v0.3.3
+        with:
+          step: shellcheck
+          enable-archivista: false
+          enable-sigstore: true
+          command: shellcheck preflight.sh
+          outfile: shellcheck-witness.json
+
+      # Only useful if source is available
+      - name: Witness Run OpenGrep
+        uses: testifysec/witness-run-action@7aa15e327829f1f2a523365c564c948d5dde69dd # v0.3.3
+        with:
+          step: opengrep
+          enable-archivista: false
+          enable-sigstore: true
+          command: opengrep scan --sarif --sarif-output opengrep.sarif.json
+          outfile: opengrep-witness.json
+
+      # Should always run
+      - name: Witness Run Gitleaks
+        uses: testifysec/witness-run-action@7aa15e327829f1f2a523365c564c948d5dde69dd # v0.3.3
+        with:
+          step: gitleaks
+          enable-archivista: false
+          enable-sigstore: true
+          command: gitleaks dir . --report-format sarif --report-path gitleaks.sarif.json
+          outfile: gitleaks-witness.json
+
+      # Create the uds package
+      - name: Witness Build Zarf package
+        uses: testifysec/witness-run-action@7aa15e327829f1f2a523365c564c948d5dde69dd # v0.3.3
+        with:
+          step: zarf-create
+          enable-archivista: false
+          enable-sigstore: true
+          command: uds zarf package create . --confirm --no-progress --architecture="amd64" --flavor "upstream"
+          outfile: zarf-create-witness.json
+
+      # `sarif-evidence` and `attestations` flags should match the outputs of the above actions, adjust as needed for
+      # added/removed/changed steps/tools
+      # `test-directory` should only exist when that directory exists with actual tests in it
+      - name: Vouch for Zarf Package
+        env:
+          OLM_CAT: cat-api.uds.run
+          OLM_ORG: mike-demo-org
+        run: |
+          ./olm vouch zarf-package-*.tar.zst \
+            --sarif-evidence opengrep.sarif.json,gitleaks.sarif.json \
+            --log-level debug --test-directory tests \
+            --attestations zarf-create-witness.json,gitleaks-witness.json,shellcheck-witness.json
+
+      # Pushes the uds package to the uds army registry, make sure the org in oci://registry.uds.run/mike-demo-org is your org and not
+      # mike-demo-org, so an org called example would be oci://registry.uds.run/example
+      # The two secrets are from a token generated in the uds army registry to allow this CI to push the package, token must be read/write.
+      # Secret names can be changed if desired, doesn't need to be `${{ secrets.UDS_ARMY_REG_USERNAME }}` and `${{ secrets.UDS_ARMY_REG_PASSWORD }}`
+      - name: Publish Zarf Package
+        run: |
+          uds zarf tools registry login -u ${{ secrets.${{ secrets.UDS_ARMY_REG_USERNAME }} }} -p ${{ secrets.${{ secrets.UDS_ARMY_REG_PASSWORD }} }} registry.uds.run
+          uds zarf package publish zarf-package-*.tar.zst oci://registry.uds.run/mike-demo-org
