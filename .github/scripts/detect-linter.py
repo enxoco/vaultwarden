@@ -1,14 +1,19 @@
 #!/usr/bin/env python3
 """
 Detects the appropriate linter for a repository and updates
-.github/workflows/ci.yaml to replace the Ruff linting steps.
+.github/workflows/ci.yaml to:
+  - Replace the Ruff linting steps with the appropriate linter.
+  - Wrap OpenGrep and Gitleaks installs with actions/cache (idempotent).
+  - Consolidate all tool PATH additions into a single step.
 
 Detection priority:
   1. Explicit linter config files (.eslintrc, .golangci.yml, Cargo.toml, etc.)
   2. pyproject.toml with [tool.*] sections
   3. package.json with an eslint devDependency
   4. go.mod presence
-  5. Source file extensions (*.py, *.ts, *.go, *.sh, ...)
+  5. Source file extensions (*.py, *.go, *.sh)
+     JS/TS requires an explicit config or dep — presence of .ts files alone is
+     not enough to conclude ESLint is set up.
   If nothing is found the Ruff steps are removed entirely.
 
 Usage:
@@ -29,9 +34,14 @@ from pathlib import Path
 SKIP_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv", "dist", "build", ".tox"}
 
 # Standard step indentation used in this CI template
-_ITEM = "      "   # 6 spaces  — "- name:" list-item prefix
-_CONT = "        " # 8 spaces  — step body (uses/run/with)
+_ITEM = "      "    # 6 spaces  — "- name:" list-item prefix
+_CONT = "        "  # 8 spaces  — step body (uses/run/with)
 _WITH = "          " # 10 spaces — inside "with:"
+
+# Pinned versions for static (always-present) tools
+OPENGREP_VERSION  = "v1.15.1"
+GITLEAKS_VERSION  = "v8.30.0"
+GOLANGCI_VERSION  = "v2.1.6"
 
 LINTER_DISPLAY = {
     "ruff":          "Ruff",
@@ -51,7 +61,7 @@ def find_files(root: Path, *patterns: str) -> list[Path]:
     for pattern in patterns:
         for p in root.rglob(pattern):
             rel_parts = p.relative_to(root).parts
-            # Skip the file if any parent directory is in SKIP_DIRS or is hidden (starts with '.')
+            # Skip files inside hidden directories (e.g. .github/scripts) or vendor dirs
             if any(
                 part in SKIP_DIRS or part.startswith(".")
                 for part in rel_parts[:-1]
@@ -129,9 +139,7 @@ def detect_linter(root: Path) -> tuple[str | None, dict]:
         return "golangci-lint", {}
 
     # 5. Source file extensions — only for ecosystems where a linter is effectively
-    #    universal (Python/Go/Rust) and adding one is the obvious next step.
-    #    For JS/TS we require an explicit signal above; presence of .ts files alone
-    #    doesn't mean ESLint is set up.
+    #    universal (Python/Go/shell). JS/TS requires an explicit signal above.
     if find_files(root, "*.py"):
         return "ruff", {}
 
@@ -146,6 +154,18 @@ def detect_linter(root: Path) -> tuple[str | None, dict]:
 
 # ── Step builders ─────────────────────────────────────────────────────────────
 
+def _cache_step(name: str, cache_id: str, path: str, key: str) -> str:
+    """Render an actions/cache restore step."""
+    return "\n".join([
+        f"{_ITEM}- name: {name}",
+        f"{_CONT}id: {cache_id}",
+        f"{_CONT}uses: actions/cache@v4",
+        f"{_CONT}with:",
+        f"{_WITH}path: {path}",
+        f"{_WITH}key: {key}",
+    ]) + "\n"
+
+
 def _witness_step(
     name: str,
     step_id: str,
@@ -153,7 +173,7 @@ def _witness_step(
     outfile: str,
     witness_action: str,
 ) -> str:
-    """Render a witness-run-action step block (no trailing blank line)."""
+    """Render a witness-run-action step block."""
     return "\n".join([
         f"{_ITEM}- name: {name}",
         f"{_CONT}uses: {witness_action}",
@@ -171,7 +191,8 @@ def build_steps(
 ) -> tuple[str, str, str | None]:
     """
     Returns (install_yaml, witness_yaml, outfile_name).
-    All three are empty strings when linter is None (steps will be removed).
+    install_yaml may span multiple steps (e.g. cache + conditional install).
+    All three are empty strings / None when linter is None (steps removed).
     """
     if linter is None:
         return "", "", None
@@ -188,7 +209,7 @@ def build_steps(
     if linter in ("pylint", "flake8"):
         display = LINTER_DISPLAY[linter]
         install = f"{_ITEM}- name: Install {display}\n{_CONT}run: pip install {linter}\n"
-        cmd = f"{linter} ." if linter == "flake8" else f"pylint $(git ls-files '*.py')"
+        cmd = "flake8 ." if linter == "flake8" else "pylint $(git ls-files '*.py')"
         outfile = f"{linter}-witness.json"
         witness = _witness_step(f"Witness Run {display}", linter, cmd, outfile, witness_action)
         return install, witness, outfile
@@ -200,7 +221,6 @@ def build_steps(
                 f"{_CONT}working-directory: {work_dir}\n"
                 f"{_CONT}run: npm ci\n"
             )
-            # cd into the work_dir so npx resolves the local eslint binary
             cmd = f"cd {work_dir} && npx eslint ."
         else:
             install = f"{_ITEM}- name: Install ESLint\n{_CONT}run: npm ci\n"
@@ -211,13 +231,19 @@ def build_steps(
         return install, witness, "eslint-witness.json"
 
     if linter == "golangci-lint":
+        # Install to ~/.local/bin so it lands in the shared cached directory
         install = (
-            f"{_ITEM}- name: Install golangci-lint\n"
-            f"{_CONT}run: |\n"
-            f"{_CONT}  curl -sSfL"
-            f" https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh"
-            f" | sh -s -- -b $(go env GOPATH)/bin\n"
-            f'{_CONT}  echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"\n'
+            _cache_step(
+                "Cache golangci-lint", "cache-golangci-lint",
+                "~/.local/bin/golangci-lint",
+                f"golangci-lint-${{{{ runner.os }}}}-{GOLANGCI_VERSION}",
+            )
+            + "\n"
+            + f"{_ITEM}- name: Install golangci-lint\n"
+            + f"{_CONT}if: steps.cache-golangci-lint.outputs.cache-hit != 'true'\n"
+            + f"{_CONT}run: |\n"
+            + f"{_CONT}  curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh"
+            + f" | sh -s -- -b $HOME/.local/bin\n"
         )
         witness = _witness_step(
             "Witness Run golangci-lint", "golangci-lint", "golangci-lint run ./...",
@@ -238,7 +264,21 @@ def build_steps(
 
     if linter == "shellcheck":
         files = " ".join(ctx.get("files", ["*.sh"]))
-        install = f"{_ITEM}- name: Install ShellCheck\n{_CONT}run: sudo apt-get install -y shellcheck\n"
+        # Install via apt then copy to ~/.local/bin so the binary can be cached
+        install = (
+            _cache_step(
+                "Cache ShellCheck", "cache-shellcheck",
+                "~/.local/bin/shellcheck",
+                "shellcheck-${{ runner.os }}-stable",
+            )
+            + "\n"
+            + f"{_ITEM}- name: Install ShellCheck\n"
+            + f"{_CONT}if: steps.cache-shellcheck.outputs.cache-hit != 'true'\n"
+            + f"{_CONT}run: |\n"
+            + f"{_CONT}  sudo apt-get install -y shellcheck\n"
+            + f"{_CONT}  mkdir -p $HOME/.local/bin\n"
+            + f"{_CONT}  cp $(which shellcheck) $HOME/.local/bin/shellcheck\n"
+        )
         witness = _witness_step(
             "Witness Run ShellCheck", "shellcheck", f"shellcheck {files}",
             "shellcheck-witness.json", witness_action,
@@ -246,6 +286,59 @@ def build_steps(
         return install, witness, "shellcheck-witness.json"
 
     raise ValueError(f"Unknown linter: {linter!r}")
+
+
+def build_opengrep_steps() -> str:
+    """
+    Cache + conditional install for OpenGrep.
+    Includes the existing '# Only useful if source is available' comment so that
+    replace_step (which swallows the preceding comment) ends up with the same text.
+    """
+    return (
+        f"{_ITEM}# Only useful if source is available\n"
+        + _cache_step(
+            "Cache OpenGrep", "cache-opengrep",
+            "~/.opengrep",
+            f"opengrep-${{{{ runner.os }}}}-{OPENGREP_VERSION}",
+        )
+        + "\n"
+        + f"{_ITEM}- name: Install OpenGrep\n"
+        + f"{_CONT}if: steps.cache-opengrep.outputs.cache-hit != 'true'\n"
+        + f"{_CONT}run: "
+        + f"curl -sSL https://raw.githubusercontent.com/opengrep/opengrep/{OPENGREP_VERSION}/install.sh | bash\n"
+    )
+
+
+def build_gitleaks_steps() -> str:
+    """
+    Cache + conditional install for Gitleaks, followed by the PATH consolidation
+    step for all cached tool directories.
+    Includes the existing '# Should always run' comment for the same reason as above.
+    """
+    ver = GITLEAKS_VERSION.lstrip("v")
+    return (
+        f"{_ITEM}# Should always run\n"
+        + _cache_step(
+            "Cache Gitleaks", "cache-gitleaks",
+            "~/.local/bin/gitleaks",
+            f"gitleaks-${{{{ runner.os }}}}-{GITLEAKS_VERSION}",
+        )
+        + "\n"
+        + f"{_ITEM}- name: Install Gitleaks\n"
+        + f"{_CONT}if: steps.cache-gitleaks.outputs.cache-hit != 'true'\n"
+        + f"{_CONT}run: |\n"
+        + f"{_CONT}  curl -sSL https://github.com/gitleaks/gitleaks/releases/download/{GITLEAKS_VERSION}/gitleaks_{ver}_linux_x64.tar.gz -o gitleaks.tar.gz\n"
+        + f"{_CONT}  tar -zxf gitleaks.tar.gz\n"
+        + f"{_CONT}  mkdir -p $HOME/.local/bin\n"
+        + f"{_CONT}  mv gitleaks $HOME/.local/bin\n"
+        + f"{_CONT}  rm gitleaks.tar.gz\n"
+        + "\n"
+        + f"{_ITEM}- name: Add tool directories to PATH\n"
+        + f"{_CONT}run: |\n"
+        + f"{_CONT}  mkdir -p $HOME/.local/bin\n"
+        + f'{_CONT}  echo "$HOME/.local/bin" >> "$GITHUB_PATH"\n'
+        + f'{_CONT}  echo "$HOME/.opengrep/cli/latest" >> "$GITHUB_PATH"\n'
+    )
 
 # ── YAML text manipulation ────────────────────────────────────────────────────
 
@@ -288,8 +381,8 @@ def replace_step(content: str, step_name: str, new_yaml: str) -> tuple[str, bool
 
     # Advance past the step body: lines that are more-indented than step_indent.
     # m.end() lands on the \n that ends the "- name:" line (since $ in MULTILINE
-    # matches before \n), so skip it to start scanning from the next line.
-    pos = m.end() + 1  # right after the "- name: ...\n" line
+    # matches before \n), so +1 to start scanning from the next line.
+    pos = m.end() + 1
     while pos < len(content):
         nl = content.find("\n", pos)
         line = content[pos:nl] if nl != -1 else content[pos:]
@@ -304,12 +397,55 @@ def replace_step(content: str, step_name: str, new_yaml: str) -> tuple[str, bool
 
     result = content[:start] + new_yaml + content[end:]
 
-    # When removing a step (new_yaml == ""), collapse any run of 3+ newlines down
-    # to 2 (one blank line between steps) to avoid leaving a gaping hole.
+    # When removing a step (new_yaml == ""), collapse any run of 3+ newlines
+    # to 2 (one blank line) to avoid leaving a gaping hole.
     if not new_yaml:
         result = re.sub(r"\n{3,}", "\n\n", result)
 
     return result, result != content
+
+
+def ensure_linter_cached(
+    content: str, linter: str | None, ctx: dict, witness_action: str
+) -> tuple[str, bool]:
+    """
+    For linters that download a binary (shellcheck, golangci-lint), check whether
+    the install step is already present but lacks a cache step, and wrap it if so.
+    This handles repos where detect-linter.py was run before caching was added.
+    """
+    # Map linter → (cache step marker, existing install step name)
+    cacheable = {
+        "shellcheck":    ("Cache ShellCheck",    "Install ShellCheck"),
+        "golangci-lint": ("Cache golangci-lint",  "Install golangci-lint"),
+    }
+    if linter not in cacheable:
+        return content, False
+
+    cache_marker, install_step = cacheable[linter]
+    if cache_marker in content:
+        return content, False  # Cache already present
+
+    install_yaml, _, _ = build_steps(linter, ctx, witness_action)
+    return replace_step(content, install_step, install_yaml)
+
+
+def add_tool_caching(content: str) -> tuple[str, bool]:
+    """
+    Idempotently wrap OpenGrep and Gitleaks installs with actions/cache and
+    consolidate PATH additions into a single step after Gitleaks.
+    Skips each tool if a cache step for it already exists.
+    """
+    changed = False
+
+    if "- name: Cache OpenGrep" not in content:
+        content, c = replace_step(content, "Install OpenGrep", build_opengrep_steps())
+        changed = changed or c
+
+    if "- name: Cache Gitleaks" not in content:
+        content, c = replace_step(content, "Install Gitleaks", build_gitleaks_steps())
+        changed = changed or c
+
+    return content, changed
 
 
 def update_attestations(content: str, old_outfile: str, new_outfile: str | None) -> str:
@@ -318,7 +454,7 @@ def update_attestations(content: str, old_outfile: str, new_outfile: str | None)
         return content
     if new_outfile:
         return content.replace(old_outfile, new_outfile)
-    # Remove the outfile token (and a preceding or trailing comma)
+    # Remove the outfile token and its neighbouring comma
     content = re.sub(r",\s*" + re.escape(old_outfile), "", content)
     content = re.sub(re.escape(old_outfile) + r"\s*,\s*", "", content)
     return content
@@ -383,10 +519,18 @@ def main() -> None:
 
     install_yaml, witness_yaml, new_outfile = build_steps(linter, ctx, witness_action)
 
+    # Replace linter-specific steps
     content, c1 = replace_step(content, "Install Ruff", install_yaml)
     content, c2 = replace_step(content, "Witness Run Ruff", witness_yaml)
     content = update_attestations(content, old_outfile, new_outfile)
     content = update_overview_comment(content, display)
+
+    # If the linter was already installed from a prior run but without a cache step, add it
+    content, c_linter_cache = ensure_linter_cached(content, linter, ctx, witness_action)
+
+    # Add caching for static tools (OpenGrep, Gitleaks) and consolidate PATH
+    content, c3 = add_tool_caching(content)
+    c3 = c3 or c_linter_cache
 
     if content == original:
         print("No changes needed.")
@@ -418,6 +562,8 @@ def main() -> None:
             print(f"  ✓ Updated attestations: {old_outfile} → {new_outfile}")
         else:
             print(f"  ✓ Removed {old_outfile} from attestations")
+    if c3:
+        print("  ✓ Added caching for OpenGrep and Gitleaks; consolidated PATH step")
 
 
 if __name__ == "__main__":

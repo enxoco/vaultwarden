@@ -45,7 +45,17 @@ if [ -f "$TARGET_FILE" ]; then
   echo "✅ Updated $TARGET_FILE with Org and Secret references."
 fi
 
-# 4. Interactive Secret Creation via GH CLI
+# 4. Detect linter and apply caching to CI workflow
+DETECT_LINTER=".github/scripts/detect-linter.py"
+if command -v python3 &>/dev/null && [ -f "$DETECT_LINTER" ]; then
+  echo -e "\n🔍 Detecting linter..."
+  python3 "$DETECT_LINTER"
+else
+  echo "⚠️  python3 or $DETECT_LINTER not found. Skipping linter detection."
+  echo "   Run 'python3 $DETECT_LINTER' manually to configure linting steps."
+fi
+
+# 5. Interactive Secret Creation via GH CLI
 echo -e "\n🔐 Checking for required GitHub Secrets..."
 
 if ! command -v gh &> /dev/null; then

@@ -42,24 +42,54 @@ jobs:
           username: ${{ secrets.OLM_USER_ID }}
           password: ${{ secrets.OLM_PASSWORD }}
 
+      - name: Cache ShellCheck
+        id: cache-shellcheck
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/bin/shellcheck
+          key: shellcheck-${{ runner.os }}-stable
+
       - name: Install ShellCheck
-        run: sudo apt-get install -y shellcheck
+        if: steps.cache-shellcheck.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get install -y shellcheck
+          mkdir -p $HOME/.local/bin
+          cp $(which shellcheck) $HOME/.local/bin/shellcheck
 
       # Only useful if source is available
+      - name: Cache OpenGrep
+        id: cache-opengrep
+        uses: actions/cache@v4
+        with:
+          path: ~/.opengrep
+          key: opengrep-${{ runner.os }}-v1.15.1
+
       - name: Install OpenGrep
-        run: |
-          curl -sSL https://raw.githubusercontent.com/opengrep/opengrep/v1.15.1/install.sh | bash
-          echo "$HOME/.opengrep/cli/latest" >> "$GITHUB_PATH"
+        if: steps.cache-opengrep.outputs.cache-hit != 'true'
+        run: curl -sSL https://raw.githubusercontent.com/opengrep/opengrep/v1.15.1/install.sh | bash
 
       # Should always run
+      - name: Cache Gitleaks
+        id: cache-gitleaks
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/bin/gitleaks
+          key: gitleaks-${{ runner.os }}-v8.30.0
+
       - name: Install Gitleaks
+        if: steps.cache-gitleaks.outputs.cache-hit != 'true'
         run: |
           curl -sSL https://github.com/gitleaks/gitleaks/releases/download/v8.30.0/gitleaks_8.30.0_linux_x64.tar.gz -o gitleaks.tar.gz
           tar -zxf gitleaks.tar.gz
           mkdir -p $HOME/.local/bin
           mv gitleaks $HOME/.local/bin
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           rm gitleaks.tar.gz
+
+      - name: Add tool directories to PATH
+        run: |
+          mkdir -p $HOME/.local/bin
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          echo "$HOME/.opengrep/cli/latest" >> "$GITHUB_PATH"
 
 # Any step that creates an artifact or evidence should be run via witness-run-action so that the artifact/evidence
 # can be attested to.
@@ -122,5 +152,5 @@ jobs:
       # Secret names can be changed if desired, doesn't need to be `${{ secrets.UDS_ARMY_REG_USERNAME }}` and `${{ secrets.UDS_ARMY_REG_PASSWORD }}`
       - name: Publish Zarf Package
         run: |
-          uds zarf tools registry login -u ${{ secrets.UDS_ARMY_REG_USERNAME }} }} -p {{ secrets.UDS_ARMY_REG_PASSWORD }} }} registry.uds.run
+          uds zarf tools registry login -u ${{ secrets.${{ secrets.UDS_ARMY_REG_USERNAME }} }} -p ${{ secrets.${{ secrets.UDS_ARMY_REG_PASSWORD }} }} registry.uds.run
           uds zarf package publish zarf-package-*.tar.zst oci://registry.uds.run/mike-demo-org
