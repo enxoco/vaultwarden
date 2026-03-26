@@ -1,5 +1,9 @@
 #!/bin/bash
 
+# If you have the GitHub CLI installed and authenticated: GITHUB_TOKEN=$(gh auth token) ./preflight.sh
+# Otherwise you can just run: ./preflight.sh 
+# If you don't pass a token, you may run into GitHub's unauthenticated API rate limits (60 requests per hour) when downloading files, so it's recommended to use a token if you have the GH CLI available.
+
 # --- Helper Function for Cross-Platform Sed ---
 replace_text() {
   if [[ "$OSTYPE" == "darwin"* ]]; then
@@ -99,13 +103,3 @@ else
 fi
 
 echo -e "\n✨ All set! Your CI/CD environment is ready."
-
-## Can you push a package to registry.uds.run?
-
-# zarf tools registry login \
-#     -u SA_F363-8A5C-38CA \
-#     -p dc8c1065b04afda04bec2fe074628247 \
-#     registry.uds.run
-
-# # Maybe grab a simple demo package here?
-# zarf package publish zarf-package-vaultwarden-arm64-dev-upstream.tar.zst oci://registry.uds.run/mike-demo-org/vaultwarden
