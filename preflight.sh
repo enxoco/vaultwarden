@@ -29,11 +29,17 @@ FILES=(
   ".github/actions/uds-cli-setup/action.yaml|https://raw.githubusercontent.com/lemonprogis/uds-army-demo/refs/heads/main/.github/actions/uds-cli-setup/action.yaml"
 )
 
+CURL_OPTS=(-s --retry-all-errors --retry 5 --create-dirs)
+# Use a GitHub token if available to avoid unauthenticated rate limits (60 req/hr)
+if [ -n "${GITHUB_TOKEN:-}" ]; then
+  CURL_OPTS+=(-H "Authorization: Bearer $GITHUB_TOKEN")
+fi
+
 for item in "${FILES[@]}"; do
   LOCAL_PATH="${item%%|*}"
   REMOTE_URL="${item##*|}"
   echo "Downloading $LOCAL_PATH..."
-  curl -s --create-dirs -o "$LOCAL_PATH" "$REMOTE_URL"
+  curl "${CURL_OPTS[@]}" -o "$LOCAL_PATH" "$REMOTE_URL"
 done
 
 # 3. Perform Variable Replacements
@@ -68,11 +74,21 @@ else
     # works by looking for "secrets." and grabbing the alphanumeric/underscore string after it
     SECRETS_FOUND=$(grep -oE "secrets\.[a-zA-Z0-9_]+" "$TARGET_FILE" | cut -d. -f2 | sort -u)
 
+    # Fetch the names of secrets already set in this repo so we can skip prompting for them
+    EXISTING_SECRETS=$(gh secret list --json name --jq '.[].name' 2>/dev/null || echo "")
+
     for SECRET_NAME in $SECRETS_FOUND; do
-      read -rp "Enter value for secret '$SECRET_NAME' (leave blank to skip): " SECRET_VALUE
+      if echo "$EXISTING_SECRETS" | grep -qx "$SECRET_NAME"; then
+        read -rp "Secret '$SECRET_NAME' already exists. Enter new value to update (leave blank to keep): " SECRET_VALUE
+      else
+        read -rp "Enter value for new secret '$SECRET_NAME' (leave blank to skip): " SECRET_VALUE
+      fi
+
       if [ -n "$SECRET_VALUE" ]; then
         echo -n "$SECRET_VALUE" | gh secret set "$SECRET_NAME"
-        echo "✅ Secret '$SECRET_NAME' set in GitHub."
+        echo "✅ Secret '$SECRET_NAME' updated in GitHub."
+      elif echo "$EXISTING_SECRETS" | grep -qx "$SECRET_NAME"; then
+        echo "✅ Secret '$SECRET_NAME' kept as-is."
       else
         echo "⏭️  Skipped '$SECRET_NAME'."
       fi
