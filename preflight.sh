@@ -40,8 +40,8 @@ done
 TARGET_FILE=".github/workflows/ci.yaml"
 if [ -f "$TARGET_FILE" ]; then
   replace_text "uds-army-demo" "$ORG_NAME" "$TARGET_FILE"
-  replace_text "DEMO_ORG_USER_ID" "\${{ secrets.$REG_USER_VAR }}" "$TARGET_FILE"
-  replace_text "DEMO_ORG_PASSWORD" "\${{ secrets.$REG_PASS_VAR }}" "$TARGET_FILE"
+  replace_text "DEMO_ORG_USER_ID" "$REG_USER_VAR" "$TARGET_FILE"
+  replace_text "DEMO_ORG_PASSWORD" "$REG_PASS_VAR" "$TARGET_FILE"
   echo "✅ Updated $TARGET_FILE with Org and Secret references."
 fi
 
