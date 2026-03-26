@@ -10,7 +10,6 @@ on:
       - main
 
 # Overview
-# Lint: ShellCheck
 # SAST: opengrep
 # Secrets: gitleaks
 jobs:
@@ -41,20 +40,6 @@ jobs:
         with:
           username: ${{ secrets.OLM_USER_ID }}
           password: ${{ secrets.OLM_PASSWORD }}
-
-      - name: Cache ShellCheck
-        id: cache-shellcheck
-        uses: actions/cache@v4
-        with:
-          path: ~/.local/bin/shellcheck
-          key: shellcheck-${{ runner.os }}-stable
-
-      - name: Install ShellCheck
-        if: steps.cache-shellcheck.outputs.cache-hit != 'true'
-        run: |
-          sudo apt-get install -y shellcheck
-          mkdir -p $HOME/.local/bin
-          cp $(which shellcheck) $HOME/.local/bin/shellcheck
 
       # Only useful if source is available
       - name: Cache OpenGrep
@@ -93,15 +78,6 @@ jobs:
 
 # Any step that creates an artifact or evidence should be run via witness-run-action so that the artifact/evidence
 # can be attested to.
-
-      - name: Witness Run ShellCheck
-        uses: testifysec/witness-run-action@7aa15e327829f1f2a523365c564c948d5dde69dd # v0.3.3
-        with:
-          step: shellcheck
-          enable-archivista: false
-          enable-sigstore: true
-          command: shellcheck preflight.sh
-          outfile: shellcheck-witness.json
 
       # Only useful if source is available
       - name: Witness Run OpenGrep
@@ -144,7 +120,7 @@ jobs:
           ./olm vouch zarf-package-*.tar.zst \
             --sarif-evidence opengrep.sarif.json,gitleaks.sarif.json \
             --log-level debug --test-directory tests \
-            --attestations zarf-create-witness.json,gitleaks-witness.json,shellcheck-witness.json
+            --attestations zarf-create-witness.json,gitleaks-witness.json
 
       # Pushes the uds package to the uds army registry, make sure the org in oci://registry.uds.run/uds-army-demo is your org and not
       # uds-army-demo, so an org called example would be oci://registry.uds.run/example

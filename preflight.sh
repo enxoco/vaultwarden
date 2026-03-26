@@ -1,8 +1,26 @@
 #!/bin/bash
-
-# If you have the GitHub CLI installed and authenticated: GITHUB_TOKEN=$(gh auth token) ./preflight.sh
-# Otherwise you can just run: ./preflight.sh 
-# If you don't pass a token, you may run into GitHub's unauthenticated API rate limits (60 requests per hour) when downloading files, so it's recommended to use a token if you have the GH CLI available.
+#
+# preflight.sh — UDS Army Workflow Initializer
+#
+# This script bootstraps the GitHub Actions CI/CD environment for a new UDS package
+# repository by downloading shared workflow templates from the upstream uds-army-demo
+# repo, customizing them for the current org, detecting the appropriate linter, and
+# interactively configuring any required GitHub secrets.
+#
+# Steps performed:
+#   1. Prompt for org name and registry secret variable names used in the CI workflow.
+#   2. Download the CI workflow and reusable action templates from the upstream repo.
+#   3. Replace placeholder values in ci.yaml with the provided org/secret names.
+#   4. Run detect-linter.py to configure the correct linting step for this repo.
+#   5. Interactively create or update any GitHub secrets referenced in the CI workflow.
+#
+# Usage:
+#   ./preflight.sh
+#   GITHUB_TOKEN=$(gh auth token) ./preflight.sh
+#
+# Passing a GitHub token avoids the unauthenticated API rate limit (60 req/hr) when
+# downloading template files. If the GH CLI is installed and authenticated, the token
+# can be sourced automatically as shown above.
 
 # --- Helper Function for Cross-Platform Sed ---
 replace_text() {

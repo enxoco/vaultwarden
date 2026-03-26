@@ -33,6 +33,9 @@ from pathlib import Path
 
 SKIP_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv", "dist", "build", ".tox"}
 
+# Files that are managed upstream and should never influence linter detection
+SKIP_FILES = {"preflight.sh"}
+
 # Standard step indentation used in this CI template
 _ITEM = "      "    # 6 spaces  — "- name:" list-item prefix
 _CONT = "        "  # 8 spaces  — step body (uses/run/with)
@@ -55,11 +58,28 @@ LINTER_DISPLAY = {
 
 # ── File helpers ───────────────────────────────────────────────────────────────
 
+def git_tracked_files(root: Path) -> set[Path]:
+    """Return the set of files currently tracked by git."""
+    import subprocess
+    try:
+        out = subprocess.check_output(
+            ["git", "ls-files"], cwd=root, text=True, stderr=subprocess.DEVNULL
+        )
+        return {root / line for line in out.splitlines() if line}
+    except Exception:
+        return set()
+
+
 def find_files(root: Path, *patterns: str) -> list[Path]:
-    """Glob for source files, skipping vendor/hidden/build directories."""
+    """Glob for git-tracked source files, skipping vendor/hidden/build directories."""
+    tracked = git_tracked_files(root)
     results: list[Path] = []
     for pattern in patterns:
         for p in root.rglob(pattern):
+            if p not in tracked:
+                continue
+            if p.name in SKIP_FILES:
+                continue
             rel_parts = p.relative_to(root).parts
             # Skip files inside hidden directories (e.g. .github/scripts) or vendor dirs
             if any(
