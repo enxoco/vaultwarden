@@ -13,13 +13,13 @@ echo "🚀 UDS Army Workflow Initializer"
 echo "--------------------------------"
 
 # 1. Gather User Input for Template Replacements
-read -p "Enter GitHub Org Name [my-org-name]: " ORG_NAME
+read -rp "Enter GitHub Org Name [my-org-name]: " ORG_NAME
 ORG_NAME=${ORG_NAME:-"my-org-name"}
 
-read -p "Enter Registry Username Variable Name [UDS_ARMY_REG_USERNAME]: " REG_USER_VAR
+read -rp "Enter Registry Username Variable Name [UDS_ARMY_REG_USERNAME]: " REG_USER_VAR
 REG_USER_VAR=${REG_USER_VAR:-"UDS_ARMY_REG_USERNAME"}
 
-read -p "Enter Registry Password Variable Name [UDS_ARMY_REG_PASSWORD]: " REG_PASS_VAR
+read -rp "Enter Registry Password Variable Name [UDS_ARMY_REG_PASSWORD]: " REG_PASS_VAR
 REG_PASS_VAR=${REG_PASS_VAR:-"UDS_ARMY_REG_PASSWORD"}
 
 # 2. Download Template Files from GitHub
@@ -59,7 +59,7 @@ else
     SECRETS_FOUND=$(grep -oE "secrets\.[a-zA-Z0-9_]+" "$TARGET_FILE" | cut -d. -f2 | sort -u)
 
     for SECRET_NAME in $SECRETS_FOUND; do
-      read -p "Enter value for secret '$SECRET_NAME' (leave blank to skip): " SECRET_VALUE
+      read -rp "Enter value for secret '$SECRET_NAME' (leave blank to skip): " SECRET_VALUE
       if [ -n "$SECRET_VALUE" ]; then
         echo -n "$SECRET_VALUE" | gh secret set "$SECRET_NAME"
         echo "✅ Secret '$SECRET_NAME' set in GitHub."
