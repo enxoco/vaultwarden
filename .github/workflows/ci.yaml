@@ -122,5 +122,5 @@ jobs:
       # Secret names can be changed if desired, doesn't need to be `${{ secrets.UDS_ARMY_REG_USERNAME }}` and `${{ secrets.UDS_ARMY_REG_PASSWORD }}`
       - name: Publish Zarf Package
         run: |
-          uds zarf tools registry login -u ${{ secrets.${{ secrets.UDS_ARMY_REG_USERNAME }} }} -p ${{ secrets.${{ secrets.UDS_ARMY_REG_PASSWORD }} }} registry.uds.run
+          uds zarf tools registry login -u ${{ secrets.UDS_ARMY_REG_USERNAME }} }} -p {{ secrets.UDS_ARMY_REG_PASSWORD }} }} registry.uds.run
           uds zarf package publish zarf-package-*.tar.zst oci://registry.uds.run/mike-demo-org
